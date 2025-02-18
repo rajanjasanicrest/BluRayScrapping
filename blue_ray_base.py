@@ -57,7 +57,15 @@ def visit_bluray_website():
                 print(len(movies_list))
                 print(movies_list)
 
-                # scrape_movie_from_list(movies_list, page, year)
+                for movie in movies_list:
+                    try:
+                        detail_page = context.new_page()
+                        scrape_movie_from_list(movie, detail_page, year)
+                    except Exception as e:
+                        print(e)
+                    finally:
+                        detail_page.close()
+
 
                 print(f"Successfully scrapped movies for year {year}")
             except Exception as e:

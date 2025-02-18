@@ -21,14 +21,14 @@ def getMovieList(movies_list_page, year):
         print(f'{movies_number} movies to scrap for year {year}')
 
         total_pages = math.ceil(movies_number / 20)
-
-        for page_no in (1,total_pages):
-            movies_list_page.goto(
-                f'https://www.blu-ray.com/dvd/search.php?releaseyear={year}&submit=Search&action=search&page={page_no}'
-            )
-            movies.extend(
-                movies_list_page.query_selector_all('.bevel tbody tr td a')
-            )
+        if total_pages > 1:
+            for page_no in (1,total_pages):
+                movies_list_page.goto(
+                    f'https://www.blu-ray.com/dvd/search.php?releaseyear={year}&submit=Search&action=search&page={page_no}'
+                )
+                movies.extend(
+                    movies_list_page.query_selector_all('.bevel tbody tr td a')
+                )
 
     return movies
         
