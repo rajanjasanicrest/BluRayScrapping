@@ -5,7 +5,7 @@ import random
 import json
 import os
 from playwright_stealth.stealth import stealth_sync
-from getMovieList import get_movies_list
+from getMovieList import getMovieList
 from scrape_movies import scrape_movie_from_list
 
 def get_random_proxy():
@@ -53,11 +53,11 @@ def visit_bluray_website():
             page = context.new_page()
             stealth_sync(page)  
             try:
-                movies_list = get_movies_list(page, year)
+                movies_list = getMovieList(page, year)
                 print(len(movies_list))
                 print(movies_list)
 
-                scrape_movie_from_list(movies_list)
+                # scrape_movie_from_list(movies_list)
 
                 print(f"Successfully scrapped movies for year {year}")
             except Exception as e:

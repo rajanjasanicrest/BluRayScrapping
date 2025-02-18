@@ -17,7 +17,7 @@ def getMovieList(movies_list_page, year):
 
     match = re.search(r'\d+', total_results)
     if match:
-        movies_number = match.group()
+        movies_number = int(match.group())
         print(f'{movies_number} movies to scrap for year {year}')
 
         total_pages = math.ceil(movies_number / 20)
