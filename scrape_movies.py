@@ -255,7 +255,7 @@ def scrape_movie_from_list(movie_href, detail_page, year):
 
                     # Set file name with extension
                     file_name = f'{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_front{ext}'
-                    contenttype = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+                    contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                     s3_client.upload_fileobj(
                         io.BytesIO(image_content),
                         aws_bucket,
@@ -284,13 +284,13 @@ def scrape_movie_from_list(movie_href, detail_page, year):
                     s3_client = boto3.client('s3')
 
                     file_name = f'{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_back{ext}'
-
+                    contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                     s3_client.upload_fileobj(
                         io.BytesIO(image_content),
                         aws_bucket,
                         file_name,
                         ExtraArgs = {
-                            'ContentType':f'image/{'jpeg' if ext == '.jpg' else ext[1:]}',
+                            'ContentType':contenttype,
                             'ContentDisposition': 'inline'
                         }
                     )
@@ -318,13 +318,13 @@ def scrape_movie_from_list(movie_href, detail_page, year):
                         s3_client = boto3.client('s3')
 
                         file_name = f'{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_screenshot_{index}{ext}'
-
+                        contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                         s3_client.upload_fileobj(
                             io.BytesIO(image_content),
                             aws_bucket,
                             file_name,
                             ExtraArgs = {
-                                'ContentType': f'image/{'jpeg' if ext == '.jpg' else ext[1:]}',
+                                'ContentType': contenttype,
                                 'ContentDisposition': 'inline'
                             }
                         )
