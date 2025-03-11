@@ -255,13 +255,13 @@ def scrape_movie_from_list(movie_href, detail_page, year):
 
                     # Set file name with extension
                     file_name = f'{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_front{ext}'
-
+                    contenttype = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
                     s3_client.upload_fileobj(
                         io.BytesIO(image_content),
                         aws_bucket,
                         file_name,
                         ExtraArgs = {
-                            'ContentType': f"image/{'jpeg' if ext == '.jpg' else ext[1:]}",
+                            'ContentType': contenttype,
                             'ContentDisposition': 'inline'
                         }
                     )
