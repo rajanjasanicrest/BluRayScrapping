@@ -10,7 +10,6 @@ from scrape_movies import scrape_movie_from_list
 import traceback
 import logging
 from excel_helper import write_data_to_file
-from get_epid import get_epid
 
 logger = logging.getLogger(__name__)  # Use __name__ without quotes
 logger.setLevel(logging.INFO)
@@ -47,7 +46,7 @@ def visit_bluray_website():
             },
         ])
 
-        release_years = [1998]
+        release_years = [2000]
 
         for year in release_years:
             print('*'*50)

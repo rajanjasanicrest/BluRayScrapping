@@ -40,5 +40,3 @@ def get_proxies_credentials_list():
     random.shuffle(proxies_creds)
 
     return proxies_creds
-
-print(get_proxies_credentials_list())
