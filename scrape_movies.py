@@ -261,7 +261,7 @@ def scrape_movie_from_list(movie_href, detail_page, year):
                         aws_bucket,
                         file_name,
                         ExtraArgs = {
-                            'ContentType': f'image/{'jpeg' if ext == '.jpg' else ext[1:]}',
+                            'ContentType': f"image/{'jpeg' if ext == '.jpg' else ext[1:]}",
                             'ContentDisposition': 'inline'
                         }
                     )
