@@ -120,8 +120,16 @@ def visit_bluray_website(year):
     return 'Done'
 
 if __name__ == "__main__":
-    status = visit_bluray_website(2015)
+    import argparse
+    parser = argparse.ArgumentParser(description="Blu-ray.com website scraper for Blu-ray movies")
+    parser.add_argument("--year", type=int, required=True, help="Year to scrape data for (e.g., 2024)")
+
+    args = parser.parse_args()
+
+
+    year = args.year
+    status = visit_bluray_website(year)
     while status not in ['Done']:
         print('-'*100)
         print('Restarting the Scraper')
-        status = visit_bluray_website(2015)
+        status = visit_bluray_website(year)
