@@ -120,7 +120,7 @@ def visit_bluray_website(year):
     return 'Done'
 
 if __name__ == "__main__":
-    status = visit_bluray_website()
+    status = visit_bluray_website(2015)
     while status not in ['Done']:
         print('-'*100)
         print('Restarting the Scraper')

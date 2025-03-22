@@ -47,7 +47,7 @@ def visit_bluray_website():
             },
         ])
 
-        release_years = [1998]
+        release_years = [1996]
 
         for year in release_years:
             print('*'*50)
@@ -91,6 +91,9 @@ def visit_bluray_website():
                         if movie_href not in existing_movie_urls:
                             print(f"Scraping movie {index+1} of {number_of_movies} for year {year}" )
                             scrapped_movies_list.append(scrape_movie_from_list(movie_href, detail_page, year))
+                        # elif movie_href in existing_movie_urls:
+                            # from correct_audio import correct_audio
+                            # correct_audio(detail_page, movie_href)
                     except Exception as e:
                         logging.error(f"Exception: {e.__class__.__name__} - {e}")
                         logging.error(traceback.format_exc())

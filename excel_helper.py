@@ -55,6 +55,9 @@ def write_data_to_file(data, year):
                 dvd.get('', ''),
                 dvd.get('front_s3_url', ''),
                 dvd.get('back_s3_url', ''),
+                dvd.get('slip_s3_url', ''),
+                dvd.get('slipback_s3_url', ''),
+                dvd.get('overview_s3_url', ''),
                 ','.join(dvd.get('screenshot_s3_urls', [])),
             ]
 

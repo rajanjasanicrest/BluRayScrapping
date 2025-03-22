@@ -12,8 +12,12 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 import re
 
 def sanitize_filename(title):
-    # Remove problematic characters: / ? < > \ : * | " '
-    sanitized_title = re.sub(r'[\/?<>\\:*|"\']', '', title)
+    # Remove all characters except alphanumeric, spaces, and underscores
+    sanitized_title = re.sub(r'[^\w\s]', '', title)
+    # Replace multiple spaces with a single space
+    sanitized_title = re.sub(r'\s+', ' ', sanitized_title)
+    # Strip leading and trailing spaces
+    sanitized_title = sanitized_title.strip()
     # Optionally replace spaces with underscores
     sanitized_title = sanitized_title.replace(' ', '_')
     return sanitized_title
@@ -65,30 +69,29 @@ def scrape_movie_from_list(movie_href, detail_page, year):
             '''
             movie production, runtime, release date etc stuff below.
             '''
+            movie_details["production"] = ''
             core_info = detail_page.query_selector('.subheading.grey')
             core_text = core_info.text_content()
-            core_texts = list(map(str.strip, core_text.split("|")))
-
-            if re.fullmatch(r"\d{4}(-\d{4})?", core_texts[0]):  
-                movie_details['production'] = ''
-                movie_details['production_year'] = core_texts[0].strip()
+            if '|' in core_text:
+                core_texts = list(map(str.strip, core_text.split("|")))
             else:
-                movie_details['production'] = core_texts[0].strip()
-                movie_details['production_year'] = core_texts[1].strip() if 'min' not in core_texts[1] else ''
-            
+                core_texts = [core_text]
+
             for text in core_texts:
-                if 'min' in text:
-                    movie_details['runtime'] = text.strip()
-                elif 'rated' in text.lower():
-                    movie_details['age_rating'] = text.strip()
+                if re.fullmatch(r"\d{4}(-\d{4})?", text):  # Production year (e.g., 2003 or 2003-2008)
+                    movie_details["production_year"] = text
+                elif 'min' in text:  # Runtime
+                    movie_details["runtime"] = text
+                elif 'rated' in text.lower():  # Age rating
+                    movie_details["age_rating"] = text
+                elif re.fullmatch(r"[A-Za-z]+ \d{2}, \d{4}", text):  # Release date (e.g., Feb 03, 2009)
+                    movie_details["release_date"] = text
+                elif not movie_details["production"]:  # First non-matching text is assumed to be production company
+                    movie_details["production"] = text
 
-            movie_details['release_date'] = core_texts[-1].strip()
-
-            
             '''
             movie general info stuff below.
             '''
-
             movie_config_td = detail_page.query_selector("td[width='228px']")
             #getting dynamic subheaders:
             subheaders_list = movie_config_td.query_selector_all(".subheading")
@@ -129,9 +132,13 @@ def scrape_movie_from_list(movie_href, detail_page, year):
                             movie_details.setdefault('packaging', []).append(spec)
 
             # audio specs
-            audio_locator = detail_page.query_selector_all('div#shortsubs')
+            audio_locator = detail_page.query_selector_all('div#shortaudio')
             if audio_locator:
-                audio = [audio.inner_text() for audio in audio_locator]
+                raw_text = audio_locator[0].inner_text().strip()  # Extract plain text
+                if raw_text:
+                    audio = [line.strip() for line in raw_text.split("\n") if line.strip()]
+
+
                 movie_details['audio'] =  ", ".join(audio)
 
             # movie specs
@@ -159,12 +166,12 @@ def scrape_movie_from_list(movie_href, detail_page, year):
             subheading_title = detail_page.query_selector('.subheadingtitle')
             movie_details['subheading_title'] = subheading_title.text_content() if subheading_title else ''
             movie_details['title'] = title
-            movie_info_text = movie_info_section.inner_html()  
-            movie_info_text = movie_info_text.replace("<br>", "\n").replace('&nbsp;', ' ').replace('&amp', '&')
-            movie_info_text = re.sub(r"<.*?>", "", movie_info_text).strip()
+            movie_info_text = movie_info_section.inner_text()  
+            # movie_info_text = movie_info_text.replace("<br>", "\n").replace('&nbsp;', ' ').replace('&amp', '&')
+            # movie_info_text = re.sub(r"<.*?>", "", movie_info_text).strip()
             movie_info_text = [x for x in movie_info_text.split('\n') if x != '' and 'Screenshots' not in x]
             description_texts = []
-            stop_keywords = {"Directors:", "Producers:", "Starring:", "Writers:", "Director:", "Producer:", "Writer:"}
+            stop_keywords = {"Directors:", "Producers:", "Starring:", "Writers:", "Director:", "Producer:", "Writer:", 'Narrator:'}
 
             for x in movie_info_text[1:]:
                 if any(keyword in x for keyword in stop_keywords):
@@ -234,44 +241,73 @@ def scrape_movie_from_list(movie_href, detail_page, year):
             '''
             getting front and large image
             '''
-            front_url = detail_page.query_selector('#frontimage_overlay')
-            back_url = detail_page.query_selector('#largebackimage')
+            scripts = detail_page.locator("script").all_inner_texts()
+            # Combine all script texts into one string
+            script_text = "\n".join(scripts)
 
-            if front_url:
+            # Define a dictionary to store categorized URLs
+            image_urls = {
+                "front_url": None,
+                "overview_url": None,
+                "back_url": None,
+                "slip_url": None,
+                "slipback_url": None
+            }
+            overview_s3_url = None
+            front_s3_url = None
+            back_s3_url = None
+            slip_s3_url = None
+            slipback_s3_url = None
+
+            # Define patterns for categorization
+            patterns = {
+                "front_url": r"https://images\.static-bluray\.com/movies/covers/\d+_front\.jpg\?t=\d+",
+                "overview_url": r"https://images\.static-bluray\.com/movies/covers/\d+_overview\.jpg\?t=\d+",
+                "back_url": r"https://images\.static-bluray\.com/movies/covers/\d+_back\.jpg\?t=\d+",
+                "slip_url": r"https://images\.static-bluray\.com/movies/covers/\d+_slip\.jpg\?t=\d+",
+                "slipback_url": r"https://images\.static-bluray\.com/movies/covers/\d+_slipback\.jpg\?t=\d+"
+            }
+
+            # Extract and categorize URLs
+            for key, pattern in patterns.items():
+                match = re.search(pattern, script_text)
+                if match:
+                    image_urls[key] = match.group(0)
+
+            print( image_urls)
+            
+            if image_urls.get('front_url', None):
+                front_url = image_urls['front_url']
                 print('front_url:', front_url)
-                front_url = front_url.get_attribute('src').replace('large', 'front')
-                front_s3_url = ''
+                back_s3_url = ''
                 response = requests.get(front_url)
                 if response.status_code == 200:
                     image_content = response.content
-                    
-                    # Extract file extension from URL
-                    _, ext = os.path.splitext(front_url)
+
+                    _,ext = os.path.split(front_url)
                     if '?' in ext: ext = ext.split('?')[0]
-                    ext = ext if ext else ".jpg"  # Default to .jpg if no extension found
-                    
-                    # Create S3 client
+                    ext = ext if ext else '.jpg'
+
                     s3_client = boto3.client('s3')
 
-                    # Set file name with extension
-                    file_name = f'DVD/{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_front{ext}'
+                    file_name = f'DVD/{year}/{sanitize_filename(movie_details['title'])}/{sanitize_filename(movie_details['title'])}_{blu_ray_id}_back{ext}'
                     contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                     s3_client.upload_fileobj(
                         io.BytesIO(image_content),
                         aws_bucket,
                         file_name,
                         ExtraArgs = {
-                            'ContentType': contenttype,
+                            'ContentType':contenttype,
                             'ContentDisposition': 'inline'
                         }
                     )
-
+                
                     front_s3_url = f"https://{aws_bucket}.s3.amazonaws.com/{file_name}"
                     movie_details['front_s3_url'] = front_s3_url
-
-            if back_url:
+                    
+            if image_urls.get('back_url', None):
+                back_url = image_urls['back_url']
                 print('back_url:', back_url)
-                back_url = back_url.get_attribute('src')
                 back_s3_url = ''
                 response = requests.get(back_url)
                 if response.status_code == 200:
@@ -283,7 +319,7 @@ def scrape_movie_from_list(movie_href, detail_page, year):
 
                     s3_client = boto3.client('s3')
 
-                    file_name = f'DVD/{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_back{ext}'
+                    file_name = f'4K/{year}/{sanitize_filename(movie_details['title'])}/{sanitize_filename(movie_details['title'])}_{blu_ray_id}_back{ext}'
                     contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                     s3_client.upload_fileobj(
                         io.BytesIO(image_content),
@@ -297,6 +333,99 @@ def scrape_movie_from_list(movie_href, detail_page, year):
                 
                     back_s3_url = f"https://{aws_bucket}.s3.amazonaws.com/{file_name}"
                     movie_details['back_s3_url'] = back_s3_url
+
+            if image_urls.get('slip_url', None):
+                slip_url = image_urls['slip_url']
+                print('slip_url:', slip_url)
+                slip_s3_url = ''
+                response = requests.get(slip_url)
+                if response.status_code == 200:
+                    image_content = response.content
+
+                    _,ext = os.path.split(slip_url)
+                    if '?' in ext: ext = ext.split('?')[0]
+                    ext = ext if ext else '.jpg'
+
+                    s3_client = boto3.client('s3')
+
+                    file_name = f'4K/{year}/{sanitize_filename(movie_details['title'])}/{sanitize_filename(movie_details['title'])}_{blu_ray_id}_slip{ext}'
+                    contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
+                    s3_client.upload_fileobj(
+                        io.BytesIO(image_content),
+                        aws_bucket,
+                        file_name,
+                        ExtraArgs = {
+                            'ContentType':contenttype,
+                            'ContentDisposition': 'inline'
+                        }
+                    )
+                
+                    slip_s3_url = f"https://{aws_bucket}.s3.amazonaws.com/{file_name}"
+                    movie_details['slip_s3_url'] = slip_s3_url
+
+            if image_urls.get('slipback_url', None):
+                slipback_url = image_urls['slipback_url']
+                print('slipback_url:', slipback_url)
+                slipback_s3_url = ''
+                response = requests.get(slipback_url)
+                if response.status_code == 200:
+                    image_content = response.content
+
+                    _,ext = os.path.split(slipback_url)
+                    if '?' in ext: ext = ext.split('?')[0]
+                    ext = ext if ext else '.jpg'
+
+                    s3_client = boto3.client('s3')
+
+                    file_name = f'4K/{year}/{sanitize_filename(movie_details['title'])}/{sanitize_filename(movie_details['title'])}_{blu_ray_id}_slipback{ext}'
+                    contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
+                    s3_client.upload_fileobj(
+                        io.BytesIO(image_content),
+                        aws_bucket,
+                        file_name,
+                        ExtraArgs = {
+                            'ContentType':contenttype,
+                            'ContentDisposition': 'inline'
+                        }
+                    )
+                
+                    slipback_s3_url = f"https://{aws_bucket}.s3.amazonaws.com/{file_name}"
+                    movie_details['slipback_s3_url'] = slipback_s3_url
+            
+            if image_urls.get('overview_url', None):
+                overview_url = image_urls['overview_url']
+                print('overview_url:', overview_url)
+                overview_s3_url = ''
+                response = requests.get(overview_url)
+                if response.status_code == 200:
+                    image_content = response.content
+
+                    _,ext = os.path.split(overview_url)
+                    if '?' in ext: ext = ext.split('?')[0]
+                    ext = ext if ext else '.jpg'
+
+                    s3_client = boto3.client('s3')
+
+                    file_name = f'4K/{year}/{sanitize_filename(movie_details['title'])}/{sanitize_filename(movie_details['title'])}_{blu_ray_id}_overview{ext}'
+                    contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
+                    s3_client.upload_fileobj(
+                        io.BytesIO(image_content),
+                        aws_bucket,
+                        file_name,
+                        ExtraArgs = {
+                            'ContentType':contenttype,
+                            'ContentDisposition': 'inline'
+                        }
+                    )
+                
+                    overview_s3_url = f"https://{aws_bucket}.s3.amazonaws.com/{file_name}"
+                    movie_details['overview_s3_url'] = overview_s3_url
+
+            movie_details['front_s3_url'] = front_s3_url if front_s3_url else ''
+            movie_details['back_s3_url'] = back_s3_url if back_s3_url else ''
+            movie_details['slip_s3_url'] = slip_s3_url if slip_s3_url else ''
+            movie_details['overview_s3_url'] = overview_s3_url if overview_s3_url else ''
+            movie_details['slipback_s3_url'] = slipback_s3_url if slipback_s3_url else '' 
 
             '''
             getting screenshots
@@ -317,7 +446,7 @@ def scrape_movie_from_list(movie_href, detail_page, year):
 
                         s3_client = boto3.client('s3')
 
-                        file_name = f'DVD/{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_screenshot_{index}{ext}'
+                        file_name = f'4K/{year}/{sanitize_filename(title)}/{sanitize_filename(title)}_{blu_ray_id}_screenshot_{index}{ext}'
                         contenttype = f"image/jpeg" if ext == '.jpg' else f"image/{ext[1:]}"
                         s3_client.upload_fileobj(
                             io.BytesIO(image_content),
@@ -379,33 +508,33 @@ def scrape_movie_from_list(movie_href, detail_page, year):
         print(e)
 
 
-if __name__ == '__main__':
-    from playwright.sync_api import sync_playwright
+# if __name__ == '__main__':
+#     from playwright.sync_api import sync_playwright
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True
-        )  # Set headless=True for background execution
-        context = browser.new_context(
-            viewport={'width': 1280, 'height': 800},
-        )
-        context.add_cookies([
-            {
-                "name": "country",
-                "value": "us",
-                "domain": ".blu-ray.com",
-                "path": "/",
-                "max_age": 30 * 24 * 60 * 60
-            },
-            {
-                "name": "listlayout_21",
-                "value": "simple",
-                "domain": ".blu-ray.com",
-                "path": "/",
-                "max_age": 30 * 24 * 60 * 60
-            },
-        ])
-        page = context.new_page()
-        print(scrape_movie_from_list('https://www.blu-ray.com/dvd/The-Chameleon-DVD/47790/', page, 1998))
+#     with sync_playwright() as p:
+#         browser = p.chromium.launch(
+#             headless=True
+#         )  # Set headless=True for background execution
+#         context = browser.new_context(
+#             viewport={'width': 1280, 'height': 800},
+#         )
+#         context.add_cookies([
+#             {
+#                 "name": "country",
+#                 "value": "us",
+#                 "domain": ".blu-ray.com",
+#                 "path": "/",
+#                 "max_age": 30 * 24 * 60 * 60
+#             },
+#             {
+#                 "name": "listlayout_21",
+#                 "value": "simple",
+#                 "domain": ".blu-ray.com",
+#                 "path": "/",
+#                 "max_age": 30 * 24 * 60 * 60
+#             },
+#         ])
+#         page = context.new_page()
+#         print(scrape_movie_from_list('https://www.blu-ray.com/dvd/Joseph-Campbell-Sukhavati-DVD/19096/', page, 2007))
 
-        page.close()
+#         page.close()
